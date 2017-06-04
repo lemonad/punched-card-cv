@@ -2,8 +2,19 @@
 Proof of concept reading of punched cards using photos of
 punched cards and OpenCV.
 
-
 Jonas Nockert, 2017.
+
+
+1. Find upper left corner (the diagonally cut corner) by checking
+   which corner that has most background pixels.
+
+2. Now that we know the orientation of the card, use a grid approach
+   to go through each potentially punched position to see if it is
+   punched or not, again by counting background pixels. Each column
+   forms a bit pattern.
+
+3. Match this bit pattern with a fixed 64 character map (different
+   punched cards can have different maps).
 
 """
 from math import sqrt
