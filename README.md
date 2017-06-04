@@ -3,10 +3,19 @@ and OpenCV. If one has a stack of punched card, the idea is to take photos
 of each card (without having to be careful about orientation and perspective)
 and use this program to read them.
 
-Currently only works with one specific type of card (included).
+Currently only works with one specific type of card:
+
+![Card](1280px-Punched_card.jpg)
 
 
-Basic outline of procedure
+### Run code
+    > python3 readcard.py 1280px-Punched_card.jpg
+          CALL RCLASS(AAA,21,NNC,PX3,PX4)
+    > python3 readcard.py 1280px-Punched_card-rotated.jpg
+          CALL RCLASS(AAA,21,NNC,PX3,PX4)
+
+
+### Basic outline of how it works
 
 1. Find upper left corner (the diagonally cut corner) by checking
    which corner that has most background pixels.
