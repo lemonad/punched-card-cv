@@ -42,55 +42,31 @@ def find_corner (thresh):
     x_direction = (box[0] - box[1]) / dim1
     y_direction = (box[0] - box[3]) / dim2
 
-    # Corner 1.
-    pts = np.array([box[0],
-                    box[0] - x_direction * corner_len,
-                    box[0] - x_direction * corner_len - y_direction * corner_len,
-                    box[0] - y_direction * corner_len],
-                   np.int32)
-    pts = pts.reshape((-1,1,2))
-    # cv2.polylines(imcolor, [pts], True, (0, 255, 255), 5)
-    c1 = get_corner_black_pixel_count(thresh, pts)
+    corner_pixel_count = [0] * 4
+    dir_signs = [[-1, -1], [1, -1], [1, 1], [-1, 1]]
 
-    # Corner 2.
-    pts = np.array([box[1],
-                    box[1] + x_direction * corner_len,
-                    box[1] + x_direction * corner_len - y_direction * corner_len,
-                    box[1] - y_direction * corner_len],
-                   np.int32)
-    pts = pts.reshape((-1,1,2))
-    # cv2.polylines(imcolor, [pts], True, (0, 255, 255), 5)
-    c2 = get_corner_black_pixel_count(thresh, pts)
-
-    # Corner 3.
-    pts = np.array([box[2],
-                    box[2] + x_direction * corner_len,
-                    box[2] + x_direction * corner_len + y_direction * corner_len,
-                    box[2] + y_direction * corner_len],
-                   np.int32)
-    pts = pts.reshape((-1,1,2))
-    # cv2.polylines(imcolor, [pts], True, (0, 255, 255), 5)
-    c3 = get_corner_black_pixel_count(thresh, pts)
-
-    # Corner 4.
-    pts = np.array([box[3],
-                    box[3] - x_direction * corner_len,
-                    box[3] - x_direction * corner_len + y_direction * corner_len,
-                    box[3] + y_direction * corner_len],
-                   np.int32)
-    pts = pts.reshape((-1,1,2))
-    # cv2.polylines(imcolor, [pts], True, (0, 255, 255), 5)
-    c4 = get_corner_black_pixel_count(thresh, pts)
+    for i in range(4):
+        x_sign = dir_signs[i][0]
+        y_sign = dir_signs[i][1]
+        pts = np.array([box[i],
+                        box[i] + x_direction * corner_len * x_sign,
+                        box[i] + x_direction * corner_len * x_sign
+                               + y_direction * corner_len * y_sign,
+                        box[i] + y_direction * corner_len * y_sign],
+                       np.int32)
+        pts = pts.reshape((-1, 1, 2))
+        # cv2.polylines(imcolor, [pts], True, (0, 255, 255), 5)
+        corner_pixel_count[i] = get_corner_black_pixel_count(thresh, pts)
 
     # The corner with most black pixels is the upper left corner.
-    max_c = max(c1, c2, c3, c4)
+    max_c = max(corner_pixel_count)
 
     # Return upper left, upper right, lower right, lower left corners.
-    if max_c == c1:
+    if max_c == corner_pixel_count[0]:
         return (box[0], box[1], box[2], box[3])
-    elif max_c == c2:
+    elif max_c == corner_pixel_count[1]:
         return (box[1], box[2], box[3], box[0])
-    elif max_c == c3:
+    elif max_c == corner_pixel_count[2]:
         return (box[2], box[3], box[0], box[1])
     else:
         return (box[3], box[0], box[1], box[2])
