@@ -5,10 +5,6 @@ perspective) and use this program to read them.
 
 Currently only works with one specific type of card:
 
-![Card](test-cards/card.jpg)
-
-...and fails when photos have (too much) perspective:
-
 ![Card](test-cards/card-perspective.jpg)
 
 
@@ -18,7 +14,7 @@ Currently only works with one specific type of card:
     > python3 readcard.py test-cards/card-rotated.jpg
           CALL RCLASS(AAA,21,NNC,PX3,PX4)
     > python3 readcard.py test-cards/card-perspective.jpg
-          &ALL RCLASS(AAA,21,NNCYPX YPX )  -- fails!
+          CALL RCLASS(AAA,21,NNC,PX3,PX4)
 
 
 ### Basic outline of how it works
@@ -30,9 +26,6 @@ Currently only works with one specific type of card:
    to go through each potentially punched position to see if it is
    punched or not, again by counting background pixels. Each column
    forms a bit pattern.
-
-   (This is where handling perspective gets tricky and the current
-   solution is not accurate enough.)
 
 3. Match this bit pattern with a fixed 64 character map (different
    punched cards can have different maps).

@@ -55,7 +55,7 @@ def line_intersection(p0, p1, q0, q1):
     return np.array((p0x + (t * vpx), p0y + (t * vpy)))
 
 
-def find_corner (thresh, imcolor):
+def find_corner (thresh):
     """Figure out which corner is the upper left corner.
 
     The upper left corner of a punched card is cut diagonally and not
@@ -173,6 +173,38 @@ def get_corner_black_pixel_count (thresh, pts):
     return cv2.countNonZero(corner)
 
 
+def transform(thresh, upper_left, upper_right, lower_right, lower_left):
+    """Perspective transform image."""
+    im2, contours, hierarchy = cv2.findContours(thresh,
+                                                cv2.RETR_TREE,
+                                                cv2.CHAIN_APPROX_SIMPLE)
+    cnt = contours[0]
+    rect = cv2.minAreaRect(cnt)
+    box = cv2.boxPoints(rect)
+    box = np.float32(box)
+
+    x_ordered = sorted(box, key=lambda corner: corner[0])
+    left_corners = x_ordered[:2]
+    right_corners = x_ordered[2:]
+    xy_ordered = sorted(left_corners, key=lambda corner: corner[1])
+    c1 = np.array((xy_ordered[0][0], xy_ordered[0][1]), dtype=np.float32)
+    c4 = np.array((xy_ordered[1][0], xy_ordered[1][1]), dtype=np.float32)
+    xy_ordered = sorted(right_corners, key=lambda corner: corner[1])
+    c2 = np.array((xy_ordered[0][0], xy_ordered[0][1]), dtype=np.float32)
+    c3 = np.array((xy_ordered[1][0], xy_ordered[1][1]), dtype=np.float32)
+
+    w = np.linalg.norm(c2 - c1)
+    h = np.linalg.norm(c4 - c1)
+
+    src = np.array((upper_left, upper_right, lower_right, lower_left),
+                   dtype=np.float32)
+    dst = np.array(([0, 0], [w, 0], [w, h], [0, h]), dtype=np.float32)
+
+    transformation = cv2.getPerspectiveTransform(src, dst)
+    imdst = cv2.warpPerspective(thresh, transformation, (w, h))
+    return imdst
+
+
 def read_card(image_path):
     """Read a punched card from a photo."""
     cardim = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
@@ -183,36 +215,27 @@ def read_card(image_path):
     dilation = cv2.dilate(cardim, kernel, iterations = 1)
     erodation = cv2.erode(dilation, kernel, iterations = 1)
     ret, thresh = cv2.threshold(erodation, 127, 255, 0)
-    imcolor = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
 
-    (upper_left, upper_right, lower_right, lower_left) = find_corner(thresh,
-                                                                     imcolor)
-
-    cv2.circle(imcolor, (upper_left[0], upper_left[1]), 30, (0, 255, 0), 10)
+    (upper_left, upper_right, lower_right, lower_left) = find_corner(thresh)
+    thresh_m = transform(thresh, upper_left, upper_right, lower_right,
+                         lower_left)
+    (height, width) = thresh_m.shape
+    # imcolor = cv2.cvtColor(thresh_m, cv2.COLOR_GRAY2BGR)
 
     line = ""
     # TODO Remove hard coded offsets for punch card holes.
-    upper_delta_x = (upper_right - upper_left) / 84.9
-    lower_delta_x = (lower_right - lower_left) / 84.9
+    delta_x = width / 84.5
     for i in range(80):
-        ul = upper_left + upper_delta_x * 3.0 + upper_delta_x * float(i)
-        ll = lower_left + lower_delta_x * 3.0 + lower_delta_x * float(i)
-        cv2.line(imcolor,
-                 (int(ul[0]), int(ul[1])),
-                 (int(ll[0]), int(ll[1])),
-                 (255, 0))
+        x = int(delta_x * 2.8 + delta_x * float(i))
+        # cv2.line(imcolor, (x, 0), (x, height), (255, 0, 0))
 
         holes = [False] * 12
         for jr in range(12):
             j = 11 - jr
-            loc = ll + (ul - ll) * 0.08 + (ul - ll) / 12.90 * float(j)
-            x = int(loc[0])
-            y = int(loc[1])
-            cv2.circle(imcolor,
-                       (x, y),
-                       2, (255, 0, 255), 1)
-            hole = 255 - thresh[y-2:y+2, x-2:x+2]
-            holes[j] = cv2.countNonZero(hole) > 1
+            y = int(height * 0.08 + height / 12.90 * float(j))
+            # cv2.circle(imcolor, (x, y), 2, (255, 0, 255), 1)
+            hole = 255 - thresh_m[y-2:y+2, x-2:x+2]
+            holes[jr] = cv2.countNonZero(hole) > 1
 
         bits = 0
         for b in range(12):
