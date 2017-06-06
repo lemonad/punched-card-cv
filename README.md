@@ -7,6 +7,10 @@ Currently only works with one specific type of card:
 
 ![Card](test-cards/card.jpg)
 
+...and fails when photos have (too much) perspective:
+
+![Card](test-cards/card-perspective.jpg)
+
 
 ### Run code
     > python3 readcard.py test-cards/card.jpg
