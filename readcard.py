@@ -26,7 +26,36 @@ import numpy as np
 from charmap_ibm_029 import charmap
 
 
-def find_corner (thresh):
+class ImageError(Exception):
+    """Raised when image could not be processed."""
+
+
+def line_intersection(p0, p1, q0, q1):
+    """Returns intersection point if lines intersect, otherwise None."""
+    vp = p1 - p0
+    vq = q1 - q0
+
+    vpx = vp[0][0]
+    vpy = vp[0][1]
+    vqx = vq[0][0]
+    vqy = vq[0][1]
+
+    delta_x = (p0 - q0)[0][0]
+    delta_y = (p0 - q0)[0][1]
+    p0x = p0[0][0]
+    p0y = p0[0][1]
+
+    det = (-vqx * vpy + vpx * vqy)
+    if abs(det) < 1e-20:
+        return None
+
+    s = (-vpy * (delta_x) + vpx * (delta_y)) / det
+    t = (vqx * (delta_y) - vqy * (delta_x)) / det
+
+    return np.array((p0x + (t * vpx), p0y + (t * vpy)))
+
+
+def find_corner (thresh, imcolor):
     """Figure out which corner is the upper left corner.
 
     The upper left corner of a punched card is cut diagonally and not
@@ -35,52 +64,98 @@ def find_corner (thresh):
 
     """
     # Find minimum polygon that surrounds card.
-    im2, contours, hierarchy = cv2.findContours(thresh,
-                                                cv2.RETR_TREE,
-                                                cv2.CHAIN_APPROX_SIMPLE)
-    # cv2.drawContours(thresh, contours, -1, (0,0,0), 3)
-    rect = cv2.minAreaRect(contours[0])
-    box = cv2.boxPoints(rect)
-    box = np.int0(box)
+    im2, contours, hierarchy = cv2.findContours(thresh.copy(),
+                                                cv2.RETR_CCOMP,
+                                                cv2.CHAIN_APPROX_NONE)
+    # Approximate bounding box to a small number of points. Since the cards
+    # have three rounded corners and one cut corner, the extra points will
+    # be used to approximate this and the four four longest line segments
+    # are the sides of the card.
+    d = 0
+    while True:
+        d = d + 1;
+        approx = cv2.approxPolyDP(contours[0], d, True);
+        if len(approx) <= 8:
+            break
+    # cv2.drawContours(imcolor, [approx], 0, (0, 0, 255), 2)
 
-    dim1 = sqrt(pow(box[0][0] - box[1][0], 2) + pow(box[0][1] - box[1][1], 2))
-    dim2 = sqrt(pow(box[0][0] - box[3][0], 2) + pow(box[0][1] - box[3][1], 2))
-    width = max(dim1, dim2)
-    height = min(dim1, dim2)
+    # Find the four longest corners.
+    lines = []
+    approx_len = len(approx)
+    for i in range(approx_len):
+        next_i = (i + 1) % approx_len
+        dist = np.linalg.norm(approx[i] - approx[next_i])
+        lines.append([dist, approx[i], approx[next_i]])
+    lines.sort(reverse=True)
+
+    corner_pts = []
+    corner_pts.append(line_intersection(lines[0][1], lines[0][2],
+                                        lines[2][1], lines[2][2]))
+    corner_pts.append(line_intersection(lines[0][1], lines[0][2],
+                                        lines[3][1], lines[3][2]))
+    corner_pts.append(line_intersection(lines[1][1], lines[1][2],
+                                        lines[2][1], lines[2][2]))
+    corner_pts.append(line_intersection(lines[1][1], lines[1][2],
+                                        lines[3][1], lines[3][2]))
+
+    # Order points upper left, upper right, lower right, lower left.
+    x_ordered = sorted(corner_pts, key=lambda corner: corner[0])
+    left_corners = x_ordered[:2]
+    right_corners = x_ordered[2:]
+    xy_ordered = sorted(left_corners, key=lambda corner: corner[1])
+    c1 = np.array((xy_ordered[0][0], xy_ordered[0][1]), dtype=np.int32)
+    c4 = np.array((xy_ordered[1][0], xy_ordered[1][1]), dtype=np.int32)
+    xy_ordered = sorted(right_corners, key=lambda corner: corner[1])
+    c2 = np.array((xy_ordered[0][0], xy_ordered[0][1]), dtype=np.int32)
+    c3 = np.array((xy_ordered[1][0], xy_ordered[1][1]), dtype=np.int32)
+
+    # cv2.circle(imcolor, (int(c1[0]), int(c1[1])), 10, (255, 255, 0), 1)
+    # cv2.circle(imcolor, (int(c2[0]), int(c2[1])), 10, (255, 255, 0), 1)
+    # cv2.circle(imcolor, (int(c3[0]), int(c3[1])), 10, (255, 255, 0), 1)
+    # cv2.circle(imcolor, (int(c4[0]), int(c4[1])), 10, (255, 255, 0), 1)
+    # pts = np.vstack((c1, c2, c3, c4))
+    # cv2.polylines(imcolor, np.int32([pts]), True, (0,0,255), 1)
+
     # TODO Remove hard coded 5% corner side length.
-    corner_len = width * 0.05
-
-    x_direction = (box[0] - box[1]) / dim1
-    y_direction = (box[0] - box[3]) / dim2
-
+    corner_len = max(np.linalg.norm(c2 - c1), np.linalg.norm(c4 - c1)) * 0.05
     corner_pixel_count = [0] * 4
-    dir_signs = [[-1, -1], [1, -1], [1, 1], [-1, 1]]
 
-    for i in range(4):
-        x_sign = dir_signs[i][0]
-        y_sign = dir_signs[i][1]
-        pts = np.array([box[i],
-                        box[i] + x_direction * corner_len * x_sign,
-                        box[i] + x_direction * corner_len * x_sign
-                               + y_direction * corner_len * y_sign,
-                        box[i] + y_direction * corner_len * y_sign],
-                       np.int32)
-        pts = pts.reshape((-1, 1, 2))
-        # cv2.polylines(imcolor, [pts], True, (0, 255, 255), 5)
-        corner_pixel_count[i] = get_corner_black_pixel_count(thresh, pts)
+    vc1 = (c2 - c1) / np.linalg.norm(c2 - c1) * corner_len
+    vc2 = (c4 - c1) / np.linalg.norm(c4 - c1) * corner_len
+    pts = np.array((c1, c1 + vc1, c1 + vc1 + vc2, c1 + vc2), dtype=np.int32)
+    # cv2.polylines(imcolor, np.int32([pts]), True, (0,0,255), 1)
+    corner_pixel_count[0] = get_corner_black_pixel_count(thresh, pts)
+
+    vc1 = (c1 - c2) / np.linalg.norm(c1 - c2) * corner_len
+    vc2 = (c3 - c2) / np.linalg.norm(c3 - c2) * corner_len
+    pts = np.array((c2, c2 + vc1, c2 + vc1 + vc2, c2 + vc2), dtype=np.int32)
+    # cv2.polylines(imcolor, [pts], True, (0,0,255), 1)
+    corner_pixel_count[1] = get_corner_black_pixel_count(thresh, pts)
+
+    vc1 = (c2 - c3) / np.linalg.norm(c2 - c3) * corner_len
+    vc2 = (c4 - c3) / np.linalg.norm(c4 - c3) * corner_len
+    pts = np.array((c3, c3 + vc1, c3 + vc1 + vc2, c3 + vc2), dtype=np.int32)
+    # cv2.polylines(imcolor, np.int32([pts]), True, (0,0,255), 1)
+    corner_pixel_count[2] = get_corner_black_pixel_count(thresh, pts)
+
+    vc1 = (c3 - c4) / np.linalg.norm(c3 - c4) * corner_len
+    vc2 = (c1 - c4) / np.linalg.norm(c1 - c4) * corner_len
+    pts = np.array((c4, c4 + vc1, c4 + vc1 + vc2, c4 + vc2), dtype=np.int32)
+    # cv2.polylines(imcolor, np.int32([pts]), True, (0,0,255), 1)
+    corner_pixel_count[3] = get_corner_black_pixel_count(thresh, pts)
 
     # The corner with most black pixels is the upper left corner.
     max_c = max(corner_pixel_count)
 
     # Return upper left, upper right, lower right, lower left corners.
     if max_c == corner_pixel_count[0]:
-        return (box[0], box[1], box[2], box[3])
+        return (c1, c2, c3, c4)
     elif max_c == corner_pixel_count[1]:
-        return (box[1], box[2], box[3], box[0])
+        return (c2, c3, c4, c1)
     elif max_c == corner_pixel_count[2]:
-        return (box[2], box[3], box[0], box[1])
+        return (c3, c4, c1, c2)
     else:
-        return (box[3], box[0], box[1], box[2])
+        return (c4, c1, c2, c3)
 
 
 def get_corner_black_pixel_count (thresh, pts):
@@ -106,35 +181,36 @@ def read_card(image_path):
     # other information on the card
     kernel = np.ones((5,5), np.uint8)
     dilation = cv2.dilate(cardim, kernel, iterations = 1)
-    ret, thresh = cv2.threshold(dilation, 127, 255, 0)
+    erodation = cv2.erode(dilation, kernel, iterations = 1)
+    ret, thresh = cv2.threshold(erodation, 127, 255, 0)
+    imcolor = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
 
-    (upper_left, upper_right, lower_right, lower_left) = find_corner(thresh)
+    (upper_left, upper_right, lower_right, lower_left) = find_corner(thresh,
+                                                                     imcolor)
 
-    # cv2.circle(imcolor, (upper_left[0], upper_left[1]), 20, (0, 255, 0), 5)
+    cv2.circle(imcolor, (upper_left[0], upper_left[1]), 30, (0, 255, 0), 10)
 
     line = ""
     # TODO Remove hard coded offsets for punch card holes.
     upper_delta_x = (upper_right - upper_left) / 84.9
     lower_delta_x = (lower_right - lower_left) / 84.9
-    left_delta_y = (upper_left - lower_left) / 13.1
-    right_delta_y = (upper_right - lower_right) / 13.1
     for i in range(80):
         ul = upper_left + upper_delta_x * 3.0 + upper_delta_x * float(i)
         ll = lower_left + lower_delta_x * 3.0 + lower_delta_x * float(i)
-        # cv2.line(imcolor,
-        #          (int(ul[0]), int(ul[1])),
-        #          (int(ll[0]), int(ll[1])),
-        #          (255, 0))
+        cv2.line(imcolor,
+                 (int(ul[0]), int(ul[1])),
+                 (int(ll[0]), int(ll[1])),
+                 (255, 0))
 
         holes = [False] * 12
         for jr in range(12):
             j = 11 - jr
-            loc = ll + (ul - ll) / 13.15 * 1.12 + (ul - ll) / 13.15 * float(j)
+            loc = ll + (ul - ll) * 0.08 + (ul - ll) / 12.90 * float(j)
             x = int(loc[0])
             y = int(loc[1])
-            # cv2.circle(imcolor,
-            #            (x, y),
-            #            2, (255, 0, 255), 1)
+            cv2.circle(imcolor,
+                       (x, y),
+                       2, (255, 0, 255), 1)
             hole = 255 - thresh[y-2:y+2, x-2:x+2]
             holes[j] = cv2.countNonZero(hole) > 1
 
@@ -145,13 +221,14 @@ def read_card(image_path):
 
         if not bits:
             line += " "
+        elif str(bits) not in charmap:
+            print("Error: column 0x{:x} not in character map.".format(bits))
         else:
             line += charmap[str(bits)]
 
-    # cv2.drawContours(imcolor, [box], 0, (0, 0, 255), 2)
     # cv2.imshow('image', imcolor)
     # cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.destroyAllWindows()
 
     return line
 
