@@ -193,8 +193,8 @@ def transform(thresh, upper_left, upper_right, lower_right, lower_left):
     c2 = np.array((xy_ordered[0][0], xy_ordered[0][1]), dtype=np.float32)
     c3 = np.array((xy_ordered[1][0], xy_ordered[1][1]), dtype=np.float32)
 
-    w = np.linalg.norm(c2 - c1)
-    h = np.linalg.norm(c4 - c1)
+    w = int(np.linalg.norm(c2 - c1))
+    h = int(np.linalg.norm(c4 - c1))
 
     src = np.array((upper_left, upper_right, lower_right, lower_left),
                    dtype=np.float32)
