@@ -64,7 +64,7 @@ def find_corner (thresh):
 
     """
     # Find minimum polygon that surrounds card.
-    im2, contours, hierarchy = cv2.findContours(thresh.copy(),
+    contours, hierarchy = cv2.findContours(thresh.copy(),
                                                 cv2.RETR_CCOMP,
                                                 cv2.CHAIN_APPROX_NONE)
     # Approximate bounding box to a small number of points. Since the cards
@@ -175,7 +175,7 @@ def get_corner_black_pixel_count (thresh, pts):
 
 def transform(thresh, upper_left, upper_right, lower_right, lower_left):
     """Perspective transform image."""
-    im2, contours, hierarchy = cv2.findContours(thresh,
+    contours, hierarchy = cv2.findContours(thresh,
                                                 cv2.RETR_TREE,
                                                 cv2.CHAIN_APPROX_SIMPLE)
     cnt = contours[0]
