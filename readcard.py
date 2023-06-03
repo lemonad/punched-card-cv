@@ -17,7 +17,6 @@ Jonas Nockert, 2017.
    punched cards can have different maps).
 
 """
-from math import sqrt
 from sys import argv
 
 import cv2
