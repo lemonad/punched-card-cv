@@ -18,6 +18,7 @@ Jonas Nockert, 2017.
 
 """
 from sys import argv
+import argparse
 
 import cv2
 import numpy as np
@@ -204,7 +205,7 @@ def transform(thresh, upper_left, upper_right, lower_right, lower_left):
     return imdst
 
 
-def read_card(image_path):
+def read_card(image_path, threshold, kernelsize, mediansize):
     """Read a punched card from a photo."""
     cardim = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
 
@@ -223,11 +224,11 @@ def read_card(image_path):
 
     # Dilate, threshold, and median in order to try and remove text and
     # other information on the card
-    kernel = np.ones((5,5), np.uint8)
+    kernel = np.ones((kernelsize, kernelsize), np.uint8)
     dilation = cv2.dilate(cardim_resized, kernel, iterations = 1)
     erodation = cv2.erode(dilation, kernel, iterations = 1)
-    ret, thresh_speckled = cv2.threshold(erodation, 127, 255, 0)
-    thresh = cv2.medianBlur(thresh_speckled, 5)
+    ret, thresh_speckled = cv2.threshold(erodation, threshold, 255, 0)
+    thresh = cv2.medianBlur(thresh_speckled, mediansize)
 
     (upper_left, upper_right, lower_right, lower_left) = find_corner(thresh)
     thresh_m = transform(thresh, upper_left, upper_right, lower_right,
@@ -270,9 +271,14 @@ def read_card(image_path):
 
 
 if __name__ == "__main__":
+    arg_parser = argparse.ArgumentParser(
+        prog="ReadCard",
+        description="Read the data of an IBM 80 column punched card from an image"
+    )
+    arg_parser.add_argument("filename", help="The file to analyze.")
+    arg_parser.add_argument("-t", "--threshold", type=int, default=127, help="The threshold value used to distinguish the card from the background.")
+    arg_parser.add_argument("-k", "--kernelsize", type=int, default=5, help="The size of the dilate/erode kernel.")
+    arg_parser.add_argument("-m", "--mediansize", type=int, default=5, help="The size of the median filter kernel.")
+    args = arg_parser.parse_args()
     cv2.namedWindow('image', cv2.WINDOW_NORMAL)
-
-    if len(argv) <= 1:
-        print("Usage: {:s} [image]".format(argv[0]))
-    else:
-        print(read_card(argv[1]))
+    print(read_card(args.filename, args.threshold, args.kernelsize, args.mediansize))
