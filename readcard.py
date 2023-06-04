@@ -67,6 +67,10 @@ def find_corner (thresh):
     contours, hierarchy = cv2.findContours(thresh.copy(),
                                                 cv2.RETR_CCOMP,
                                                 cv2.CHAIN_APPROX_NONE)
+    # Find contour with most points. This is probably the card itself
+    contours_list = list(contours)
+    contours_list.sort(key=lambda x: len(x), reverse=True)
+
     # Approximate bounding box to a small number of points. Since the cards
     # have three rounded corners and one cut corner, the extra points will
     # be used to approximate this and the four four longest line segments
@@ -74,7 +78,7 @@ def find_corner (thresh):
     d = 0
     while True:
         d = d + 1;
-        approx = cv2.approxPolyDP(contours[0], d, True);
+        approx = cv2.approxPolyDP(contours_list[0], d, True);
         if len(approx) <= 8:
             break
     # cv2.drawContours(imcolor, [approx], 0, (0, 0, 255), 2)
@@ -178,7 +182,9 @@ def transform(thresh, upper_left, upper_right, lower_right, lower_left):
     contours, hierarchy = cv2.findContours(thresh,
                                                 cv2.RETR_TREE,
                                                 cv2.CHAIN_APPROX_SIMPLE)
-    cnt = contours[0]
+    contours_list = list(contours)
+    contours_list.sort(key=lambda x: len(x), reverse=True)
+    cnt = contours_list[0]
     rect = cv2.minAreaRect(cnt)
     box = cv2.boxPoints(rect)
     box = np.float32(box)
