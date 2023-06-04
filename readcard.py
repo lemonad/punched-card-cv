@@ -221,12 +221,13 @@ def read_card(image_path):
 
     cardim_resized = cv2.resize(cardim, (resized_width, resized_height))
 
-    # Dilate and threshold in order to try and remove text and
+    # Dilate, threshold, and median in order to try and remove text and
     # other information on the card
     kernel = np.ones((5,5), np.uint8)
     dilation = cv2.dilate(cardim_resized, kernel, iterations = 1)
     erodation = cv2.erode(dilation, kernel, iterations = 1)
-    ret, thresh = cv2.threshold(erodation, 127, 255, 0)
+    ret, thresh_speckled = cv2.threshold(erodation, 127, 255, 0)
+    thresh = cv2.medianBlur(thresh_speckled, 5)
 
     (upper_left, upper_right, lower_right, lower_left) = find_corner(thresh)
     thresh_m = transform(thresh, upper_left, upper_right, lower_right,
