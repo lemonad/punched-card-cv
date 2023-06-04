@@ -17,8 +17,8 @@ Jonas Nockert, 2017.
    punched cards can have different maps).
 
 """
-from math import sqrt
 from sys import argv
+import argparse
 
 import cv2
 import numpy as np
@@ -64,9 +64,13 @@ def find_corner (thresh):
 
     """
     # Find minimum polygon that surrounds card.
-    im2, contours, hierarchy = cv2.findContours(thresh.copy(),
+    contours, hierarchy = cv2.findContours(thresh.copy(),
                                                 cv2.RETR_CCOMP,
                                                 cv2.CHAIN_APPROX_NONE)
+    # Find contour with most points. This is probably the card itself
+    contours_list = list(contours)
+    contours_list.sort(key=lambda x: len(x), reverse=True)
+
     # Approximate bounding box to a small number of points. Since the cards
     # have three rounded corners and one cut corner, the extra points will
     # be used to approximate this and the four four longest line segments
@@ -74,7 +78,7 @@ def find_corner (thresh):
     d = 0
     while True:
         d = d + 1;
-        approx = cv2.approxPolyDP(contours[0], d, True);
+        approx = cv2.approxPolyDP(contours_list[0], d, True);
         if len(approx) <= 8:
             break
     # cv2.drawContours(imcolor, [approx], 0, (0, 0, 255), 2)
@@ -175,10 +179,12 @@ def get_corner_black_pixel_count (thresh, pts):
 
 def transform(thresh, upper_left, upper_right, lower_right, lower_left):
     """Perspective transform image."""
-    im2, contours, hierarchy = cv2.findContours(thresh,
+    contours, hierarchy = cv2.findContours(thresh,
                                                 cv2.RETR_TREE,
                                                 cv2.CHAIN_APPROX_SIMPLE)
-    cnt = contours[0]
+    contours_list = list(contours)
+    contours_list.sort(key=lambda x: len(x), reverse=True)
+    cnt = contours_list[0]
     rect = cv2.minAreaRect(cnt)
     box = cv2.boxPoints(rect)
     box = np.float32(box)
@@ -193,8 +199,8 @@ def transform(thresh, upper_left, upper_right, lower_right, lower_left):
     c2 = np.array((xy_ordered[0][0], xy_ordered[0][1]), dtype=np.float32)
     c3 = np.array((xy_ordered[1][0], xy_ordered[1][1]), dtype=np.float32)
 
-    w = np.linalg.norm(c2 - c1)
-    h = np.linalg.norm(c4 - c1)
+    w = int(np.linalg.norm(c2 - c1))
+    h = int(np.linalg.norm(c4 - c1))
 
     src = np.array((upper_left, upper_right, lower_right, lower_left),
                    dtype=np.float32)
@@ -205,16 +211,30 @@ def transform(thresh, upper_left, upper_right, lower_right, lower_left):
     return imdst
 
 
-def read_card(image_path):
+def read_card(image_path, threshold, kernelsize, mediansize):
     """Read a punched card from a photo."""
     cardim = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
 
-    # Dilate and threshold in order to try and remove text and
+    # Resize opened image to be a consistent size
+    cardim_height, cardim_width = cardim.shape
+
+    resized_width = 1280
+    resized_height = 1280
+
+    if cardim_width >= cardim_height:
+        resized_height = int(cardim_height / cardim_width * 1280)
+    else:
+        resized_width = int(cardim_width / cardim_height * 1280)
+
+    cardim_resized = cv2.resize(cardim, (resized_width, resized_height))
+
+    # Dilate, threshold, and median in order to try and remove text and
     # other information on the card
-    kernel = np.ones((5,5), np.uint8)
-    dilation = cv2.dilate(cardim, kernel, iterations = 1)
+    kernel = np.ones((kernelsize, kernelsize), np.uint8)
+    dilation = cv2.dilate(cardim_resized, kernel, iterations = 1)
     erodation = cv2.erode(dilation, kernel, iterations = 1)
-    ret, thresh = cv2.threshold(erodation, 127, 255, 0)
+    ret, thresh_speckled = cv2.threshold(erodation, threshold, 255, 0)
+    thresh = cv2.medianBlur(thresh_speckled, mediansize)
 
     (upper_left, upper_right, lower_right, lower_left) = find_corner(thresh)
     thresh_m = transform(thresh, upper_left, upper_right, lower_right,
@@ -257,9 +277,14 @@ def read_card(image_path):
 
 
 if __name__ == "__main__":
+    arg_parser = argparse.ArgumentParser(
+        prog="ReadCard",
+        description="Read the data of an IBM 80 column punched card from an image"
+    )
+    arg_parser.add_argument("filename", help="The file to analyze.")
+    arg_parser.add_argument("-t", "--threshold", type=int, default=127, help="The threshold value used to distinguish the card from the background.")
+    arg_parser.add_argument("-k", "--kernelsize", type=int, default=5, help="The size of the dilate/erode kernel.")
+    arg_parser.add_argument("-m", "--mediansize", type=int, default=5, help="The size of the median filter kernel.")
+    args = arg_parser.parse_args()
     cv2.namedWindow('image', cv2.WINDOW_NORMAL)
-
-    if len(argv) <= 1:
-        print("Usage: {:s} [image]".format(argv[0]))
-    else:
-        print(read_card(argv[1]))
+    print(read_card(args.filename, args.threshold, args.kernelsize, args.mediansize))
