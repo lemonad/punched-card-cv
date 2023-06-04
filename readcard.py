@@ -208,10 +208,23 @@ def read_card(image_path):
     """Read a punched card from a photo."""
     cardim = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
 
+    # Resize opened image to be a consistent size
+    cardim_height, cardim_width = cardim.shape
+
+    resized_width = 1280
+    resized_height = 1280
+
+    if cardim_width >= cardim_height:
+        resized_height = int(cardim_height / cardim_width * 1280)
+    else:
+        resized_width = int(cardim_width / cardim_height * 1280)
+
+    cardim_resized = cv2.resize(cardim, (resized_width, resized_height))
+
     # Dilate and threshold in order to try and remove text and
     # other information on the card
     kernel = np.ones((5,5), np.uint8)
-    dilation = cv2.dilate(cardim, kernel, iterations = 1)
+    dilation = cv2.dilate(cardim_resized, kernel, iterations = 1)
     erodation = cv2.erode(dilation, kernel, iterations = 1)
     ret, thresh = cv2.threshold(erodation, 127, 255, 0)
 
